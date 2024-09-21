@@ -9,7 +9,7 @@ from datetime import datetime
 import requests
 
 API_URL = "https://unical.prod.up.cineca.it/api/Impegni/getImpegniCalendarioPubblico"
-CLIENT_ID = "5de6319d4414ab02f80b613a" # ?
+CLIENT_ID = "5de6319d4414ab02f80b613a"
 
 def main():
     calendar_id = input("Inserisci ID calendario: ")
@@ -23,7 +23,7 @@ def main():
             "dataFine": date_to_str(datetime(2025, 6, 30, 22, 0, 0))
         }
     )
-    assert response.status_code == 200, "Errore nella richiesta"
+    assert response.status_code == 200, "Request error"
 
     data = response.json()
     events = parse_events(data)

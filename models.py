@@ -6,5 +6,7 @@ class EventModel(BaseModel):
     subject: str
     start: datetime
     end: datetime
-    structure: str
+    location: str
     group: str
+    color: str
+    description: str

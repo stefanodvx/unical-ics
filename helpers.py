@@ -3,6 +3,8 @@ from datetime import datetime
 
 import icalendar
 
+COLORS = {"A": "mediumpurple", "B": "palegreen"}
+
 def date_to_str(obj: datetime) -> str:
     return obj.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
@@ -16,12 +18,20 @@ def parse_events(data: list) -> list["EventModel"]:
         end = str_to_date(event["dataFine"])
 
         event_info = event["evento"]
-        structure_info = event["edifici"][0]
-        structure = structure_info["descrizione"]
+        classroom_info = event["aule"][0]
+        classroom = classroom_info["descrizione"]
+        building = classroom_info["edificio"]["descrizione"]
+        teachers = ", ".join(
+            f"{x['cognome']} {x['nome']}"
+            for x in event["docenti"]
+        ) if len(event.get("docenti", [])) > 0 else ""
+        description = f"Teachers: {teachers}"
+        location = f"{building}: Aula {classroom}"
         details = event_info["dettagliDidattici"][0]
         partition = details["partizione"]
-        description = partition["descrizione"]
-        group = description.split(" ", maxsplit=1)[-1]
+        group = partition["descrizione"].split(
+            " ", maxsplit=1)[-1]
+        color = COLORS.get(group)
 
         events.append(
             EventModel(
@@ -30,7 +40,9 @@ def parse_events(data: list) -> list["EventModel"]:
                 start=start,
                 end=end,
                 group=group,
-                structure=structure
+                location=location,
+                color=color,
+                description=description
             )
         )
     return events
@@ -46,7 +58,9 @@ def generate_calendars(events: list["EventModel"]) -> None:
         obj.add("summary", event.subject)
         obj.add("dtstart", event.start)
         obj.add("dtend", event.end)
-        obj.add("location", event.structure)
+        obj.add("location", event.location)
+        obj.add("color", event.color)
+        obj.add("description", event.description)
         if event.group == "A":
             group_a.add_component(obj)
         elif event.group == "B":
