@@ -1,0 +1,8 @@
+__pycache__/
+*.json
+.env
+.DS_Store
+.idea
+.vscode
+venv/
+*.ics

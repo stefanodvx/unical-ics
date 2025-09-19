@@ -1,5 +1,5 @@
 from helpers import (
-    date_to_str,
+    datetime_to_isoformat,
     parse_events,
     generate_calendars
 )
@@ -7,23 +7,45 @@ from helpers import (
 from datetime import datetime
 
 import requests
+import click
 
 API_URL = "https://unical.prod.up.cineca.it/api/Impegni/getImpegniCalendarioPubblico"
-CLIENT_ID = "5de6319d4414ab02f80b613a" # ?
+CLIENT_ID = "5de6319d4414ab02f80b613a"
 
-def main():
-    calendar_id = input("Inserisci ID calendario: ")
+@click.command()
+@click.option(
+    "--id", "calendar_id",
+    prompt="Inserisci ID calendario",
+    help="ID del calendario pubblico"
+)
+@click.option(
+    "--start", "start_date",
+    prompt="Inserisci data inizio (YYYY-MM-DD)",
+    help="Data inizio"
+)
+@click.option(
+    "--end", "end_date",
+    prompt="Inserisci data fine (YYYY-MM-DD)",
+    help="Data fine"
+)
+def main(
+    calendar_id: str,
+    start_date: str,
+    end_date: str
+) -> None:
+    start_date = datetime.strptime(start_date, "%Y-%m-%d")
+    end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
     response = requests.post(
         url=API_URL,
         json={
             "clienteId": CLIENT_ID,
             "linkCalendarioId": calendar_id,
-            "dataInizio": date_to_str(datetime(2024, 9, 1, 22, 0, 0)),
-            "dataFine": date_to_str(datetime(2025, 6, 30, 22, 0, 0))
+            "dataInizio": datetime_to_isoformat(start_date),
+            "dataFine": datetime_to_isoformat(end_date)
         }
     )
-    assert response.status_code == 200, "Errore nella richiesta"
+    assert response.status_code == 200, "Request error"
 
     data = response.json()
     events = parse_events(data)

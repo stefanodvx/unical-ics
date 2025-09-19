@@ -1,59 +1,116 @@
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+from typing import Optional
 from models import EventModel
-from datetime import datetime
 
 import icalendar
 
-def date_to_str(obj: datetime) -> str:
-    return obj.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+TIMEZONE = ZoneInfo("Europe/Rome")
+COLORS = {"A": "mediumpurple", "B": "palegreen"}
 
-def str_to_date(obj: str) -> datetime:
-    return datetime.strptime(obj, "%Y-%m-%dT%H:%M:%S.000Z")
+def datetime_to_isoformat(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-def parse_events(data: list) -> list["EventModel"]:
+def isoformat_to_datetime(iso_str: str) -> datetime:
+    dt = datetime.fromisoformat(iso_str.replace(".000Z", ""))
+    return dt.replace(tzinfo=timezone.utc).astimezone(TIMEZONE)
+
+def get_teachers(docenti: list[dict]) -> str:
+    return ", ".join(f"{d['cognome']} {d['nome']}" for d in docenti) if docenti else ""
+
+def get_location(classroom_entry: dict) -> Optional[str]:
+    if not classroom_entry:
+        return None
+    classroom = classroom_entry.get("descrizione")
+    building = classroom_entry.get("edificio", {}).get("descrizione")
+    return f"{building}: Aula {classroom}" if building and classroom else None
+
+def get_study_group(partition_entry: dict) -> Optional[str]:
+    description = partition_entry.get("descrizione", "")
+    parts = description.split(maxsplit=1)
+    return parts[1] if len(parts) > 1 else None
+
+def parse_events(raw_data: list[dict]) -> list[EventModel]:
     events = []
-    for event in data:
-        start = str_to_date(event["dataInizio"])
-        end = str_to_date(event["dataFine"])
 
-        event_info = event["evento"]
-        structure_info = event["edifici"][0]
-        structure = structure_info["descrizione"]
-        details = event_info["dettagliDidattici"][0]
-        partition = details["partizione"]
-        description = partition["descrizione"]
-        group = description.split(" ", maxsplit=1)[-1]
+    for idx, entry in enumerate(raw_data):
+        event_info = entry.get("evento")
+        if not event_info:
+            continue
+        try:
+            start = isoformat_to_datetime(entry["dataInizio"])
+            end = isoformat_to_datetime(entry["dataFine"])
+        except (KeyError, ValueError):
+            continue
+        classroom_info = entry.get("aule", [])
+        if not classroom_info:
+            continue
+        location = get_location(classroom_info[0])
+        if not location:
+            continue
 
+        details = event_info.get("dettagliDidattici", [{}])
+        if not details:
+            continue
+        details = details[0]
+        if not details:
+            continue
+        teachers = get_teachers(entry.get("docenti", []))
+        description = f"Docenti: {teachers}" if teachers else ""
+
+        partitions = entry.get("fattoreDiPartizione", [{}])
+        if not partitions:
+            continue
+        partitions = partitions[0].get("partizioni", [])
+        if not partitions:
+            continue
+        group = get_study_group(partitions[0])
+        if not group:
+            continue
+        if not details.get("nome"):
+            continue
         events.append(
             EventModel(
-                id=event_info["_id"],
+                id=str(idx) + event_info["_id"],
                 subject=details["nome"],
                 start=start,
                 end=end,
                 group=group,
-                structure=structure
+                location=location,
+                color=COLORS.get(group[0], ""),
+                description=description
             )
         )
+    
     return events
 
-def generate_calendars(events: list["EventModel"]) -> None:
-    group_a = icalendar.Calendar()
-    group_b = icalendar.Calendar()
+def create_ical_event(event: EventModel) -> icalendar.Event:
+    cal_event = icalendar.Event()
+    cal_event.add("uid", event.id)
+    cal_event.add("summary", event.subject)
+    cal_event.add("dtstart", event.start)
+    cal_event.add("dtend", event.end)
+    cal_event.add("location", event.location)
+    
+    if event.description:
+        cal_event.add("description", event.description)
+    if event.color:
+        cal_event.add("x-apple-color", event.color)
+        cal_event.add("color", event.color)
+    
+    return cal_event
+
+def generate_calendars(events: list[EventModel]) -> None:
+    calendars = {
+        "A": icalendar.Calendar(),
+        "B": icalendar.Calendar()
+    }
 
     for event in events:
-        obj = icalendar.Event()
-        obj.add("uid", event.id)
-        obj.add("name", event.subject)
-        obj.add("summary", event.subject)
-        obj.add("dtstart", event.start)
-        obj.add("dtend", event.end)
-        obj.add("location", event.structure)
-        if event.group == "A":
-            group_a.add_component(obj)
-        elif event.group == "B":
-            group_b.add_component(obj)
+        if event.group not in calendars:
+            continue
+        calendars[event.group].add_component(create_ical_event(event))
 
-    with open("group_a.ics", "wb+") as f:
-        f.write(group_a.to_ical())
-
-    with open("group_b.ics", "wb+") as f:
-        f.write(group_b.to_ical())
+    for group, calendar in calendars.items():
+        with open(f"Gruppo {group.lower()}.ics", "wb") as f:
+            f.write(calendar.to_ical())
