@@ -112,5 +112,5 @@ def generate_calendars(events: list[EventModel]) -> None:
         calendars[event.group].add_component(create_ical_event(event))
 
     for group, calendar in calendars.items():
-        with open(f"Gruppo {group.lower()}.ics", "wb") as f:
+        with open(f"Gruppo {group.upper()}.ics", "wb") as f:
             f.write(calendar.to_ical())
